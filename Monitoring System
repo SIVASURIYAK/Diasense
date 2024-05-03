@@ -1,0 +1,102 @@
+#define BLYNK_TEMPLATE_ID "TMPL3dWdQszGq"
+#define BLYNK_TEMPLATE_NAME "DIASENSE"
+#define BLYNK_AUTH_TOKEN "n0eeEq_pAPePX5THO9eXnfvodGCwk8Ns"
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <math.h>
+
+char auth[] = ""; // Your Blynk authentication token
+char ssid[] = ""; // Your Wi-Fi network SSID
+char pass[] = ""; // Your Wi-Fi network password
+
+#define ONE_WIRE_BUS 18 // Data pin for DS18B20 temperature sensor
+#define piezoPin1 34 // Analog input pin for the first piezoelectric sensor
+#define piezoPin2 35 // Analog input pin for the second piezoelectric sensor
+#define piezoPin3 32 // Analog input pin for the third piezoelectric sensor
+
+#define SDA_PIN 21  // I2C SDA pin
+#define SCL_PIN 22  // I2C SCL pin
+
+Adafruit_MPU6050 mpu;
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+void setup() {
+  Serial.begin(9600);
+  
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+
+  Blynk.begin(auth, ssid, pass);
+  
+  sensors.begin();
+  Wire.begin(SDA_PIN, SCL_PIN); // Initialize I2C with specified pins
+
+  // Initialize MPU6050 sensor
+  Serial.println("Initializing MPU6050...");
+  if (!mpu.begin()) {
+    Serial.println("Failed to find MPU6050 chip");
+    while (1) {
+      delay(10);
+    }
+  }
+  Serial.println("MPU6050 Found!");
+
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+  
+  Serial.println("Initialization complete.");
+}
+
+void loop() {
+  Blynk.run();
+
+  // Read temperature sensor
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempCByIndex(0);
+
+  // Read piezoelectric sensors
+  int piezoValue1 = analogRead(piezoPin1);
+  int piezoValue2 = analogRead(piezoPin2);
+  int piezoValue3 = analogRead(piezoPin3);
+
+  // Read gyroscope values
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+
+  // Calculate roll angle
+  float roll = atan2(a.acceleration.y, a.acceleration.z) * 180.0 / PI;
+
+  // Print sensor data to serial monitor
+  Serial.print("Temperature: ");
+  Serial.print(tempC);
+  Serial.println(" °C");
+  Serial.print("Piezo Sensor 1 Value: ");
+  Serial.println(piezoValue1);
+  Serial.print("Piezo Sensor 2 Value: ");
+  Serial.println(piezoValue2);
+  Serial.print("Piezo Sensor 3 Value: ");
+  Serial.println(piezoValue3);
+  Serial.print("Roll Angle: ");
+  Serial.println(roll); // Print roll angle
+  
+  // Send sensor data to Blynk
+  Blynk.virtualWrite(V0, tempC); // Virtual pin V0 for temperature
+  Blynk.virtualWrite(V1, piezoValue1); // Virtual pin V1 for piezo sensor 1 value
+  Blynk.virtualWrite(V2, piezoValue2); // Virtual pin V2 for piezo sensor 2 value
+  Blynk.virtualWrite(V3, piezoValue3); // Virtual pin V3 for piezo sensor 3 value
+  Blynk.virtualWrite(V4, roll); // Virtual pin V4 for roll angle
+  
+  delay(100); // Delay for stability
+}
